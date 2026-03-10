@@ -1,0 +1,696 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Shield, Swords, Heart, ChevronRight, Play, RefreshCcw, Sparkles, Loader, Zap, BookOpen, Crown } from 'lucide-react';
+
+// --- 全局自定义动画样式 (Injecting High-End CSS Keyframes) ---
+const customStyles = `
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-8px) rotate(-5deg); }
+    50% { transform: translateX(8px) rotate(5deg); }
+    75% { transform: translateX(-8px) rotate(-5deg); }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 15px rgba(20, 184, 166, 0.4); }
+    50% { box-shadow: 0 0 30px rgba(20, 184, 166, 0.8); }
+  }
+  .animate-float { animation: float 3s ease-in-out infinite; }
+  .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+  .animate-pulse-glow { animation: pulse-glow 2s infinite; }
+  
+  /* 隐藏滚动条但允许滚动 */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+`;
+
+// --- 常量与数据 (Constants & Data) ---
+const PLAYER_MAX_HP = 5;
+const ENEMY_MAX_HP = 10;
+
+const AVATARS = ['🦊', '🐰', '🐶', '🐱', '🐼', '🐯', '🦁', '🐸', '🦉', '🦄'];
+
+const TOPICS = [
+  { id: 'eat', name: '吃 (Eat)', enemyName: '贪吃兽', avatar: '🍔', gradient: 'from-orange-400 to-red-500', shadow: 'shadow-orange-500/40' },
+  { id: 'drink', name: '喝 (Drink)', enemyName: '水精', avatar: '🥤', gradient: 'from-cyan-400 to-blue-500', shadow: 'shadow-blue-500/40' },
+  { id: 'play', name: '玩 (Play)', enemyName: '捣蛋鬼', avatar: '🎮', gradient: 'from-purple-400 to-indigo-500', shadow: 'shadow-purple-500/40' },
+  { id: 'fun', name: '乐 (Fun)', enemyName: '开心果', avatar: '🎪', gradient: 'from-pink-400 to-rose-500', shadow: 'shadow-pink-500/40' }
+];
+
+const VOCABULARY = {
+  eat: [
+    { hanzi: '吃', pinyin: 'chī', english: 'eat' },
+    { hanzi: '米饭', pinyin: 'mǐ fàn', english: 'rice' },
+    { hanzi: '苹果', pinyin: 'píng guǒ', english: 'apple' },
+    { hanzi: '菜', pinyin: 'cài', english: 'dish / vegetable' },
+    { hanzi: '水果', pinyin: 'shuǐ guǒ', english: 'fruit' },
+    { hanzi: '面包', pinyin: 'miàn bāo', english: 'bread' },
+    { hanzi: '肉', pinyin: 'ròu', english: 'meat' },
+    { hanzi: '鱼', pinyin: 'yú', english: 'fish' },
+    { hanzi: '鸡蛋', pinyin: 'jī dàn', english: 'egg' },
+    { hanzi: '饭馆', pinyin: 'fàn guǎn', english: 'restaurant' },
+    { hanzi: '蛋糕', pinyin: 'dàn gāo', english: 'cake' },
+    { hanzi: '面条', pinyin: 'miàn tiáo', english: 'noodles' },
+    { hanzi: '饺子', pinyin: 'jiǎo zi', english: 'dumplings' },
+    { hanzi: '早饭', pinyin: 'zǎo fàn', english: 'breakfast' },
+    { hanzi: '晚饭', pinyin: 'wǎn fàn', english: 'dinner' }
+  ],
+  drink: [
+    { hanzi: '喝', pinyin: 'hē', english: 'drink' },
+    { hanzi: '水', pinyin: 'shuǐ', english: 'water' },
+    { hanzi: '茶', pinyin: 'chá', english: 'tea' },
+    { hanzi: '杯子', pinyin: 'bēi zi', english: 'cup / glass' },
+    { hanzi: '牛奶', pinyin: 'niú nǎi', english: 'milk' },
+    { hanzi: '咖啡', pinyin: 'kā fēi', english: 'coffee' },
+    { hanzi: '果汁', pinyin: 'guǒ zhī', english: 'juice' },
+    { hanzi: '啤酒', pinyin: 'pí jiǔ', english: 'beer' },
+    { hanzi: '渴', pinyin: 'kě', english: 'thirsty' },
+    { hanzi: '冰水', pinyin: 'bīng shuǐ', english: 'ice water' },
+    { hanzi: '热茶', pinyin: 'rè chá', english: 'hot tea' },
+    { hanzi: '可乐', pinyin: 'kě lè', english: 'cola' },
+    { hanzi: '汤', pinyin: 'tāng', english: 'soup' },
+    { hanzi: '绿茶', pinyin: 'lǜ chá', english: 'green tea' },
+    { hanzi: '红茶', pinyin: 'hóng chá', english: 'black tea' }
+  ],
+  play: [
+    { hanzi: '玩', pinyin: 'wán', english: 'play' },
+    { hanzi: '朋友', pinyin: 'péng you', english: 'friend' },
+    { hanzi: '电影', pinyin: 'diàn yǐng', english: 'movie' },
+    { hanzi: '电脑', pinyin: 'diàn nǎo', english: 'computer' },
+    { hanzi: '电视', pinyin: 'diàn shì', english: 'television' },
+    { hanzi: '手机', pinyin: 'shǒu jī', english: 'mobile phone' },
+    { hanzi: '足球', pinyin: 'zú qiú', english: 'football' },
+    { hanzi: '篮球', pinyin: 'lán qiú', english: 'basketball' },
+    { hanzi: '游戏', pinyin: 'yóu xì', english: 'game' },
+    { hanzi: '去', pinyin: 'qù', english: 'go' },
+    { hanzi: '跑', pinyin: 'pǎo', english: 'run' },
+    { hanzi: '看', pinyin: 'kàn', english: 'look / watch' },
+    { hanzi: '游泳', pinyin: 'yóu yǒng', english: 'swim' },
+    { hanzi: '运动', pinyin: 'yùn dòng', english: 'sports' },
+    { hanzi: '听', pinyin: 'tīng', english: 'listen' }
+  ],
+  fun: [
+    { hanzi: '高兴', pinyin: 'gāo xìng', english: 'happy' },
+    { hanzi: '喜欢', pinyin: 'xǐ huan', english: 'like' },
+    { hanzi: '爱', pinyin: 'ài', english: 'love' },
+    { hanzi: '笑', pinyin: 'xiào', english: 'laugh' },
+    { hanzi: '漂亮', pinyin: 'piào liang', english: 'pretty / beautiful' },
+    { hanzi: '快乐', pinyin: 'kuài lè', english: 'joyful' },
+    { hanzi: '音乐', pinyin: 'yīn yuè', english: 'music' },
+    { hanzi: '唱歌', pinyin: 'chàng gē', english: 'sing' },
+    { hanzi: '跳舞', pinyin: 'tiào wǔ', english: 'dance' },
+    { hanzi: '好', pinyin: 'hǎo', english: 'good' },
+    { hanzi: '谢谢', pinyin: 'xiè xie', english: 'thank you' },
+    { hanzi: '欢迎', pinyin: 'huān yíng', english: 'welcome' },
+    { hanzi: '不错', pinyin: 'bú cuò', english: 'not bad' },
+    { hanzi: '礼物', pinyin: 'lǐ wù', english: 'gift' },
+    { hanzi: '玩乐', pinyin: 'wán lè', english: 'have fun' }
+  ]
+};
+
+const ALL_ENGLISH_WORDS = Object.values(VOCABULARY).flat().map(w => w.english);
+
+// --- 辅助逻辑 ---
+const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const shuffleArray = (array) => {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+};
+
+// --- ✨ Gemini API ---
+const fetchGemini = async (prompt, isJson = false) => {
+  const apiKey = ""; 
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+  const payload = { contents: [{ parts: [{ text: prompt }] }] };
+
+  if (isJson) {
+    payload.generationConfig = {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          enemyName: { type: "STRING" },
+          avatar: { type: "STRING" },
+          vocabulary: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: { hanzi: { type: "STRING" }, pinyin: { type: "STRING" }, english: { type: "STRING" } }
+            }
+          }
+        }
+      }
+    };
+  }
+
+  let retries = 5;
+  let delay = 1000;
+  while (retries > 0) {
+    try {
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      const data = await response.json();
+      const text = data.candidates[0].content.parts[0].text;
+      return isJson ? JSON.parse(text) : text;
+    } catch (error) {
+      retries--;
+      if (retries === 0) throw error;
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+};
+
+// --- UI 组件：高级进度条 ---
+const PremiumHPBar = ({ current, max, isEnemy }) => {
+  const percentage = Math.max(0, (current / max) * 100);
+  let colorClass = 'from-emerald-400 to-green-500';
+  let shadowClass = 'shadow-green-500/50';
+  
+  if (percentage <= 50) {
+    colorClass = 'from-amber-400 to-orange-500';
+    shadowClass = 'shadow-orange-500/50';
+  }
+  if (percentage <= 20) {
+    colorClass = 'from-red-500 to-rose-600';
+    shadowClass = 'shadow-red-500/50';
+  }
+
+  return (
+    <div className="w-full">
+      <div className="flex justify-between items-end mb-1 px-1">
+        <span className="text-xs font-bold text-white/80 uppercase tracking-wider">HP</span>
+        <span className="text-xs font-black text-white">{current} / {max}</span>
+      </div>
+      <div className="w-full bg-black/40 h-3 rounded-full overflow-hidden backdrop-blur-sm border border-white/10 p-[2px]">
+        <div 
+          className={`h-full rounded-full bg-gradient-to-r ${colorClass} ${shadowClass} shadow-[0_0_10px_rgba(0,0,0,0.5)] transition-all duration-700 ease-out`} 
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+// --- 主组件 ---
+export default function App() {
+  const [gameState, setGameState] = useState('menu'); 
+  const [player, setPlayer] = useState({ name: '小智', avatar: '🦊', hp: PLAYER_MAX_HP });
+  const [enemy, setEnemy] = useState(null);
+  
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [dialogText, setDialogText] = useState('');
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [battlePhase, setBattlePhase] = useState('intro'); 
+  const [winner, setWinner] = useState(null);
+  const [shakeTarget, setShakeTarget] = useState(null); 
+  const [flashScreen, setFlashScreen] = useState(false);
+  
+  // AI 特性状态
+  const [hintsLeft, setHintsLeft] = useState(3);
+  const [isHintLoading, setIsHintLoading] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiTopicPrompt, setAiTopicPrompt] = useState('');
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+
+  const activeVocabRef = useRef([]);
+  const [questionIndex, setQuestionIndex] = useState(0);
+
+  // 挂载自定义样式
+  useEffect(() => {
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = customStyles;
+    document.head.appendChild(styleSheet);
+    return () => styleSheet.remove();
+  }, []);
+
+  const startGame = () => setGameState('customize');
+  const confirmPlayer = () => setGameState('topic');
+
+  const startBattle = (topic) => {
+    const sourceVocab = topic.isAi ? topic.vocabulary : VOCABULARY[topic.id];
+    activeVocabRef.current = shuffleArray([...sourceVocab]);
+    setQuestionIndex(0);
+    setHintsLeft(3);
+
+    setEnemy({ ...topic, hp: ENEMY_MAX_HP });
+    setPlayer(p => ({ ...p, hp: PLAYER_MAX_HP }));
+    setGameState('battle');
+    setBattlePhase('intro');
+    setWinner(null);
+    setDialogText(`✨ 遭遇野生首领【${topic.enemyName}】！\n去吧，${player.name}，展现你的词汇力量！`);
+    
+    setTimeout(() => {
+      generateAndSetQuestion(0, topic.enemyName);
+    }, 2500);
+  };
+
+  const generateAndSetQuestion = (index, enemyName) => {
+    const word = activeVocabRef.current[index];
+    const optionsSet = new Set([word.english]);
+    const currentTopicEnglishWords = activeVocabRef.current.map(w => w.english);
+    const allPool = [...ALL_ENGLISH_WORDS, ...currentTopicEnglishWords];
+
+    while (optionsSet.size < 4) {
+      const randomWord = allPool[getRandomInt(0, allPool.length - 1)];
+      optionsSet.add(randomWord);
+    }
+    const options = shuffleArray(Array.from(optionsSet));
+
+    setCurrentQuestion({ word: word, correctAnswer: word.english, options: options });
+    setBattlePhase('question');
+    setDialogText(`【 ${enemyName} 】发起了汉字攻击！\n\n「 ${word.hanzi} 」 (${word.pinyin})\n\n请选择正确的英文意思：`);
+  };
+
+  const triggerHitEffect = (target) => {
+    setShakeTarget(target);
+    setFlashScreen(true);
+    setTimeout(() => setFlashScreen(false), 100);
+    setTimeout(() => setShakeTarget(null), 500);
+  };
+
+  const handleAnswer = (selectedOption) => {
+    if (isAnimating || battlePhase !== 'question') return;
+    setIsAnimating(true);
+    setBattlePhase('result');
+
+    const isCorrect = selectedOption === currentQuestion.correctAnswer;
+    const nextIndex = questionIndex + 1;
+    setQuestionIndex(nextIndex);
+    
+    if (isCorrect) {
+      setDialogText(`🎯 回答正确！\n效果拔群！【${enemy.enemyName}】受到了 1 点伤害！`);
+      triggerHitEffect('enemy');
+      setEnemy(prev => {
+        const newHp = prev.hp - 1;
+        checkWinCondition(player.hp, newHp, nextIndex, prev.enemyName);
+        return { ...prev, hp: newHp };
+      });
+    } else {
+      setDialogText(`❌ 哎呀，答错了！\n正确答案是 "${currentQuestion.correctAnswer}"。\n${player.name} 受到了 1 点伤害！`);
+      triggerHitEffect('player');
+      setPlayer(prev => {
+        const newHp = prev.hp - 1;
+        checkWinCondition(newHp, enemy.hp, nextIndex, enemy.enemyName);
+        return { ...prev, hp: newHp };
+      });
+    }
+  };
+
+  const checkWinCondition = (playerHp, enemyHp, nextIndex, currentEnemyName) => {
+    setTimeout(() => {
+      if (enemyHp <= 0) {
+        setDialogText(`🌟 恭喜！【${currentEnemyName}】被击败了！\n你成为了汉字大师！`);
+        setWinner('player');
+        setTimeout(() => setGameState('gameover'), 3000);
+      } else if (playerHp <= 0) {
+        setDialogText(`💔 ${player.name} 体力耗尽...\n挑战失败，请重新来过！`);
+        setWinner('enemy');
+        setTimeout(() => setGameState('gameover'), 3000);
+      } else {
+        setIsAnimating(false);
+        generateAndSetQuestion(nextIndex, currentEnemyName);
+      }
+    }, 2500);
+  };
+
+  const resetGame = () => setGameState('menu');
+
+  const requestHint = async () => {
+    if (hintsLeft <= 0 || isHintLoading || !currentQuestion) return;
+    setIsHintLoading(true);
+    setHintsLeft(prev => prev - 1);
+    
+    const originalText = dialogText;
+    setDialogText("✨ 正在连接 AI 导师，解析汉字奥秘...");
+
+    try {
+      const prompt = `你是一个幽默的中文老师。学生正在学习词汇：${currentQuestion.word.hanzi} (${currentQuestion.word.pinyin})。请用一句简短、有趣、富有画面感的中文提供记忆提示或字形故事。绝对不要在回复中直接出现英文 "${currentQuestion.correctAnswer}"。`;
+      const hintResponse = await fetchGemini(prompt, false);
+      setDialogText(`💡 AI 导师提示：\n${hintResponse}\n\n(原题：「 ${currentQuestion.word.hanzi} 」是什么意思？)`);
+    } catch (error) {
+      setDialogText("网络波动，AI 导师连接失败。\n\n" + originalText);
+      setHintsLeft(prev => prev + 1); 
+    } finally {
+      setIsHintLoading(false);
+    }
+  };
+
+  const handleGenerateAiTopic = async () => {
+    if (!aiTopicPrompt.trim()) return;
+    setIsAiGenerating(true);
+    try {
+      const prompt = `Generate exactly 15 simple Chinese words for HSK1/2 level related to '${aiTopicPrompt}'. Also create a funny boss name (ending with 怪/兽/精/王) and 1 emoji avatar.`;
+      const aiData = await fetchGemini(prompt, true);
+      
+      if (!aiData.vocabulary || aiData.vocabulary.length < 5) throw new Error("Invalid AI data");
+
+      const aiTopic = {
+        id: 'ai_custom_' + Date.now(),
+        name: `${aiTopicPrompt}`,
+        enemyName: aiData.enemyName || '幻影兽',
+        avatar: aiData.avatar || '👽',
+        gradient: 'from-teal-400 to-emerald-600',
+        shadow: 'shadow-teal-500/50',
+        isAi: true,
+        vocabulary: aiData.vocabulary
+      };
+
+      startBattle(aiTopic);
+      setShowAiModal(false);
+      setAiTopicPrompt('');
+    } catch (error) {
+      alert("生成失败，请尝试其他词汇！");
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
+  // --- 视图渲染 (Views) ---
+
+  if (gameState === 'menu') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 font-sans text-white overflow-hidden relative">
+        {/* 背景装饰 */}
+        <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-indigo-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-70 animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-rose-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-70 animate-pulse" style={{ animationDelay: '2s' }}></div>
+
+        <div className="max-w-md w-full relative z-10 flex flex-col items-center">
+          <div className="text-8xl mb-6 animate-float drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]">🐉</div>
+          <h1 className="text-5xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-white to-rose-300 text-center drop-shadow-lg tracking-tight">
+            汉字精灵<br/>大对决
+          </h1>
+          <p className="text-indigo-200 text-lg mb-12 font-medium tracking-widest uppercase flex items-center gap-2">
+            <BookOpen size={18} /> HSK Level 1 Edition
+          </p>
+          
+          <button 
+            onClick={startGame}
+            className="group relative px-8 py-5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl font-bold text-xl shadow-[0_0_40px_rgba(99,102,241,0.4)] hover:shadow-[0_0_60px_rgba(99,102,241,0.6)] hover:-translate-y-1 transition-all duration-300 flex items-center gap-3 overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
+            <span className="relative z-10 flex items-center gap-2">开始冒险 <ChevronRight className="group-hover:translate-x-1 transition-transform" /></span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'customize') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 font-sans text-white relative">
+        <div className="max-w-md w-full bg-slate-800/50 backdrop-blur-xl rounded-[2rem] shadow-2xl p-8 border border-slate-700/50 relative z-10">
+          <h2 className="text-3xl font-black text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">塑造你的英雄</h2>
+          
+          <div className="mb-8">
+            <label className="block text-slate-300 font-medium mb-3 ml-1 text-sm uppercase tracking-wider">英雄名称</label>
+            <input 
+              type="text" 
+              value={player.name}
+              onChange={(e) => setPlayer({...player, name: e.target.value})}
+              className="w-full px-5 py-4 bg-slate-900/50 border border-slate-600 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 text-xl font-bold transition-all shadow-inner text-white placeholder-slate-500"
+              maxLength={10}
+              placeholder="输入名称..."
+            />
+          </div>
+
+          <div className="mb-10">
+            <label className="block text-slate-300 font-medium mb-3 ml-1 text-sm uppercase tracking-wider">选择守护精灵</label>
+            <div className="grid grid-cols-5 gap-3">
+              {AVATARS.map(avatar => (
+                <button
+                  key={avatar}
+                  onClick={() => setPlayer({...player, avatar})}
+                  className={`text-3xl aspect-square flex items-center justify-center rounded-2xl transition-all duration-300 ${
+                    player.avatar === avatar 
+                      ? 'bg-indigo-500 border-2 border-indigo-300 scale-110 shadow-[0_0_20px_rgba(99,102,241,0.5)] z-10' 
+                      : 'bg-slate-800/80 border-2 border-transparent hover:bg-slate-700 hover:scale-105'
+                  }`}
+                >
+                  {avatar}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={confirmPlayer}
+            className="w-full py-5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white font-bold text-xl rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2"
+          >
+            确认出发 <ChevronRight />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'topic') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center p-4 font-sans text-white relative no-scrollbar overflow-y-auto">
+        <div className="max-w-2xl w-full pt-12 pb-8 z-10">
+          <div className="text-center mb-10">
+            <h2 className="text-4xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">选择挑战领域</h2>
+            <p className="text-slate-400">击败各领域的首领，掌握核心词汇</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {TOPICS.map(topic => (
+              <button
+                key={topic.id}
+                onClick={() => startBattle(topic)}
+                className={`relative overflow-hidden rounded-[2rem] p-6 bg-slate-800 border border-slate-700 hover:border-slate-500 transition-all duration-300 group hover:-translate-y-1 hover:shadow-2xl ${topic.shadow}`}
+              >
+                {/* 背景渐变光晕 */}
+                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${topic.gradient} rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity`}></div>
+                
+                <div className="flex items-center gap-5 relative z-10">
+                  <div className={`text-4xl w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-br ${topic.gradient} shadow-lg shadow-black/20 transform group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300`}>
+                    {topic.avatar}
+                  </div>
+                  <div className="text-left flex-grow">
+                    <h3 className="text-2xl font-black text-white mb-1">{topic.name}</h3>
+                    <p className="text-sm font-medium text-slate-400 flex items-center gap-1">
+                      <Swords size={14} /> 首领: {topic.enemyName}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-white/20 transition-colors">
+                    <ChevronRight className="text-slate-300 group-hover:text-white" />
+                  </div>
+                </div>
+              </button>
+            ))}
+
+            {/* AI 自定义主题按钮 (Premium Style) */}
+            <button
+              onClick={() => setShowAiModal(true)}
+              className="relative overflow-hidden rounded-[2rem] p-6 bg-slate-800 border border-teal-500/30 hover:border-teal-400 transition-all duration-300 group hover:-translate-y-1 hover:shadow-2xl shadow-teal-500/20 md:col-span-2 animate-pulse-glow"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-teal-900/40 to-emerald-900/40 opacity-50 group-hover:opacity-100 transition-opacity"></div>
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-5">
+                  <div className="text-4xl w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-br from-teal-400 to-emerald-500 shadow-lg text-white">
+                    <Sparkles size={32} />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-emerald-300 mb-1">AI 梦境探险</h3>
+                    <p className="text-sm font-medium text-teal-100/70">输入任何你想学的主题，AI 将为你生成专属挑战！</p>
+                  </div>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* AI 模态框 (Glassmorphism) */}
+        {showAiModal && (
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 border border-slate-600 rounded-[2rem] p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
+               <div className="absolute top-[-50px] right-[-50px] w-40 h-40 bg-teal-500 rounded-full blur-[64px] opacity-30"></div>
+              
+              <h3 className="text-3xl font-black mb-2 text-white flex items-center gap-3 relative z-10">
+                <Sparkles className="text-teal-400" size={28} /> 创造专属冒险
+              </h3>
+              <p className="text-slate-400 mb-6 font-medium relative z-10">
+                告诉 AI 你想学习的词汇主题（例如：动物、交通、天气），AI 将立即生成你的专属首领与题库！
+              </p>
+              
+              <input 
+                type="text"
+                value={aiTopicPrompt}
+                onChange={e => setAiTopicPrompt(e.target.value)}
+                placeholder="输入主题 (例如：交通工具)"
+                className="w-full px-5 py-4 bg-slate-900/50 border border-slate-600 rounded-2xl mb-6 focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30 text-lg font-bold text-white placeholder-slate-600 relative z-10"
+                disabled={isAiGenerating}
+              />
+              
+              <div className="flex gap-3 relative z-10">
+                <button 
+                  onClick={() => setShowAiModal(false)}
+                  className="flex-1 py-4 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-2xl transition-colors"
+                  disabled={isAiGenerating}
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleGenerateAiTopic}
+                  className="flex-[2] py-4 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white font-bold rounded-2xl transition-all shadow-lg shadow-teal-500/30 flex justify-center items-center gap-2"
+                  disabled={isAiGenerating || !aiTopicPrompt.trim()}
+                >
+                  {isAiGenerating ? <Loader className="animate-spin" size={20} /> : <Zap size={20} />} 
+                  {isAiGenerating ? 'AI 生成中...' : '生成并开战'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (gameState === 'battle') {
+    return (
+      <div className={`min-h-screen bg-slate-950 flex flex-col items-center justify-center p-0 sm:p-4 font-sans relative overflow-hidden transition-colors duration-200 ${flashScreen ? 'bg-red-500/20' : ''}`}>
+        
+        {/* 动态全屏沉浸背景 */}
+        <div className={`absolute inset-0 bg-gradient-to-br ${enemy.gradient} opacity-20`}></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_50%)]"></div>
+
+        <div className="w-full max-w-4xl h-[100dvh] sm:h-auto sm:aspect-[9/16] md:aspect-[4/3] sm:rounded-[2.5rem] bg-slate-900/40 backdrop-blur-2xl sm:border border-slate-700/50 shadow-2xl overflow-hidden flex flex-col relative z-10">
+          
+          {/* 上半部：战斗场景 */}
+          <div className="relative flex-grow flex flex-col justify-between p-6 overflow-hidden">
+            {flashScreen && <div className="absolute inset-0 bg-white/20 z-0"></div>}
+            
+            {/* 敌人板块 (右上) */}
+            <div className={`self-end flex items-center gap-4 z-10 ${shakeTarget === 'enemy' ? 'animate-shake' : ''}`}>
+              <div className="bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-600 shadow-xl w-48 sm:w-64">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-black text-white text-lg">{enemy.enemyName}</span>
+                  <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded-md">Lv.BOSS</span>
+                </div>
+                <PremiumHPBar current={enemy.hp} max={ENEMY_MAX_HP} />
+              </div>
+              <div className="text-7xl sm:text-9xl filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] transform -scale-x-100 animate-float">
+                {enemy.avatar}
+              </div>
+            </div>
+
+            {/* 玩家板块 (左下) */}
+            <div className={`self-start flex items-center gap-4 z-10 ${shakeTarget === 'player' ? 'animate-shake' : ''}`}>
+              <div className="text-7xl sm:text-9xl filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] animate-float" style={{ animationDelay: '1.5s' }}>
+                {player.avatar}
+              </div>
+              <div className="bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-600 shadow-xl w-48 sm:w-64">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-black text-white text-lg">{player.name}</span>
+                  <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded-md">Lv.1</span>
+                </div>
+                <PremiumHPBar current={player.hp} max={PLAYER_MAX_HP} />
+              </div>
+            </div>
+          </div>
+
+          {/* 下半部：操作与对话区 (Glassmorphism UI) */}
+          <div className="bg-slate-900/80 backdrop-blur-xl border-t border-slate-700/50 p-4 sm:p-6 flex flex-col h-[45%] sm:h-64 shrink-0 rounded-t-3xl sm:rounded-t-none">
+            
+            {/* 对话框 */}
+            <div className="flex-grow text-lg sm:text-xl font-medium text-slate-200 whitespace-pre-wrap leading-relaxed overflow-y-auto no-scrollbar mb-4 drop-shadow-md">
+              {dialogText}
+            </div>
+
+            {/* 互动区 */}
+            {battlePhase === 'question' && !isAnimating && currentQuestion && (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {currentQuestion.options.map((opt, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleAnswer(opt)}
+                      className="relative overflow-hidden bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-indigo-400 text-white font-bold py-3 sm:py-4 px-4 rounded-2xl shadow-lg text-center text-base sm:text-lg active:scale-95 transition-all duration-200 group"
+                    >
+                      <span className="relative z-10">{opt}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* AI 提示按钮 */}
+                <div className="flex justify-end mt-2">
+                  <button 
+                    onClick={requestHint}
+                    disabled={hintsLeft <= 0 || isHintLoading}
+                    className={`text-sm font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-all duration-300 shadow-lg ${
+                      hintsLeft > 0 && !isHintLoading
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-orange-500/30 border border-orange-400/50' 
+                        : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-80'
+                    }`}
+                  >
+                    {isHintLoading ? <Loader size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                    {isHintLoading ? '解析中...' : `AI 提示 (${hintsLeft}/3)`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'gameover') {
+    const isWin = winner === 'player';
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 font-sans text-white relative">
+        {/* 背景光效 */}
+        <div className={`absolute inset-0 bg-gradient-to-t ${isWin ? 'from-amber-900/40 to-slate-900' : 'from-red-900/20 to-slate-900'} z-0`}></div>
+        
+        <div className="max-w-md w-full relative z-10 flex flex-col items-center text-center">
+          <div className="relative mb-8">
+            <div className={`absolute inset-0 blur-2xl opacity-50 ${isWin ? 'bg-amber-400' : 'bg-red-600'}`}></div>
+            <div className="text-8xl relative z-10 animate-float">
+              {isWin ? <Crown className="text-amber-400 w-32 h-32 drop-shadow-2xl" /> : '💀'}
+            </div>
+          </div>
+          
+          <h2 className={`text-5xl font-black mb-4 tracking-tight text-transparent bg-clip-text ${isWin ? 'bg-gradient-to-b from-amber-200 to-amber-500' : 'bg-gradient-to-b from-red-300 to-red-600'}`}>
+            {isWin ? 'VICTORY' : 'DEFEAT'}
+          </h2>
+          
+          <p className="text-lg mb-10 text-slate-300 font-medium px-4">
+            {isWin 
+              ? `太精彩了！${player.name} 以压倒性的词汇量击败了【${enemy.enemyName}】！` 
+              : `别灰心，${player.name}。失败是成功之母，再挑战一次【${enemy.enemyName}】吧！`}
+          </p>
+
+          <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-3xl p-6 flex justify-center items-center gap-8 mb-10 w-full shadow-2xl">
+            <div className="text-center">
+              <div className="text-5xl mb-3 drop-shadow-lg">{player.avatar}</div>
+              <div className="font-black text-white">{player.name}</div>
+            </div>
+            <div className="text-3xl font-black italic text-slate-600">VS</div>
+            <div className="text-center">
+              <div className={`text-5xl mb-3 drop-shadow-lg ${isWin ? 'filter grayscale opacity-50 scale-90' : ''}`}>{enemy.avatar}</div>
+              <div className={`font-black ${isWin ? 'text-slate-500' : 'text-white'}`}>{enemy.enemyName}</div>
+            </div>
+          </div>
+
+          <button 
+            onClick={resetGame}
+            className="w-full py-5 font-bold text-xl rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 bg-white text-slate-900 hover:bg-slate-200 hover:scale-[1.02]"
+          >
+            <RefreshCcw size={24} /> 返回大厅
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
